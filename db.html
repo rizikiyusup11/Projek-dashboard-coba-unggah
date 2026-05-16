@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Development Inequality Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* Memperbaiki warna teks option agar tidak menyatu dengan background dropdown */
+select option {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-logo">World Bank · Open Data</div>
+  <div class="splash-title">Global Development Inequality Dashboard</div>
+  <div class="splash-sub">Memuat file CSV dari folder proyek secara otomatis…</div>
+  <div class="prog-wrap" id="prog-wrap">
+    <div class="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
+    <div class="prog-lbl" id="prog-lbl">Menginisialisasi…</div>
+  </div>
+  <div class="splash-err" id="splash-err" style="display:none;">
+    <strong>⚠️ Gagal memuat CSV otomatis.</strong><br><br>
+    Dashboard menggunakan <code>fetch()</code> — butuh <strong>web server lokal</strong>, bukan buka file HTML langsung.<br><br>
+    <strong>Solusi:</strong><br>
+    • VS Code → klik <em>Go Live</em> (Live Server extension)<br>
+    • Terminal: <code>python -m http.server 8080</code> di folder proyek<br>
+    • Atau pilih file CSV manual di bawah ↓<br><br>
+    <strong>File CSV yang dibutuhkan (nama file harus sama persis):</strong><br>
+    <code>GDP per capita.csv</code>, <code>Individuals using the Internet.csv</code>,
+    <code>Life expectancy at birth, total.csv</code>, <code>Inflation, consumer prices.csv</code>,
+    <code>Access to electricity.csv</code>, <code>People using at least basic drinking water services.csv</code>,
+    <code>School enrollment, secondary.csv</code>, <code>Unemployment, total.csv</code>,
+    <code>Urban population.csv</code>, <code>Population growth.csv</code>
+  </div>
+  <div id="splash-fb" style="display:none;">
+    <input type="file" id="file-input" accept=".csv" multiple style="display:none">
+    <button class="btn-g" id="btn-pick-files">📂 Pilih semua file CSV (Ctrl+A di folder)</button>
+    <div class="file-grid" id="file-grid"></div>
+    <div style="margin-top:14px;"><button class="btn-p" id="btn-manual" onclick="processCsvFiles()" style="display:none">Muat Dashboard →</button></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
+<nav id="sidebar">
+  <div class="sb-hd">
+    <div class="sb-logo">World Bank</div>
+    <div class="sb-title">Global Development<br>Inequality</div>
+  </div>
+  <hr class="sb-div">
+  <div class="sb-sec">
+    <div class="sb-lbl"><i class="bi bi-calendar-event"></i> Tahun Analisis</div>
+    <div class="yr-disp" id="yr-disp">2020</div>
+    <input type="range" id="filter-year" min="2000" max="2023" value="2020" step="1">
+  </div>
+  <div class="sb-sec">
+    <div class="sb-lbl"><i class="bi bi-geo-alt"></i> Kawasan / Benua</div>
+    <select class="sb-sel" id="filter-region"><option value="all">Semua Kawasan</option></select>
+  </div>
+  <div class="sb-sec">
+    <div class="sb-lbl"><i class="bi bi-cash-stack"></i> Income Group</div>
+    <div class="ip-pills">
+      <label class="ip-pill ip-hi"><input type="checkbox" value="High Income" checked onchange="refresh()"> High Income</label>
+      <label class="ip-pill ip-um"><input type="checkbox" value="Upper-Middle Income" checked onchange="refresh()"> Upper-Middle Income</label>
+      <label class="ip-pill ip-lm"><input type="checkbox" value="Lower-Middle Income" checked onchange="refresh()"> Lower-Middle Income</label>
+      <label class="ip-pill ip-lo"><input type="checkbox" value="Low Income" checked onchange="refresh()"> Low Income</label>
+    </div>
+  </div>
+  <div class="sb-ft">
+    Sumber: World Bank Open Data<br>
+    Income group diklasifikasi ulang <em>per tahun</em> menggunakan threshold GNI Atlas Method (disesuaikan inflasi ~4%/thn dari baseline 2023).
+    <br><button class="btn-g" onclick="resetApp()" style="margin-top:10px;width:100%;"><i class="bi bi-arrow-counterclockwise"></i> Ganti File CSV</button>
+  </div>
+</nav>
+
+<div id="main">
+  <div style="padding: 14px 24px 0; display:flex; align-items:center; gap:12px;">
+    <button class="mbtn" onclick="toggleSidebar()">
+      <i class="bi bi-list"></i> Menu
+    </button>
+    <span class="header-tagline">GLOBAL DEVELOPMENT INEQUALITY · WORLD BANK OPEN DATA</span>
+  </div>
+
+  <!-- HERO BANNER -->
+  <div class="hero-banner">
+    <div class="hero-text">
+      <h1>Perjalanan Pembangunan Dunia</h1>
+      <p>✈ Data Ekonomi &amp; Sosial · 2000–2023 · World Bank Atlas Method</p>
+    </div>
+    <div class="hero-plane">✈</div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-num">190+</div>
+        <div class="hero-stat-lbl">Negara</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">10</div>
+        <div class="hero-stat-lbl">Indikator</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">23</div>
+        <div class="hero-stat-lbl">Tahun</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpi-bar">
+    <div class="kpi-card"><div class="kpi-val" id="kpi-total">—</div><div class="kpi-lbl">Negara dalam tampilan</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-high" style="color:var(--high)">—</div><div class="kpi-lbl">High Income</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-um" style="color:var(--um)">—</div><div class="kpi-lbl">Upper-Middle</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-lm" style="color:var(--lm)">—</div><div class="kpi-lbl">Lower-Middle</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-low" style="color:var(--low)">—</div><div class="kpi-lbl">Low Income</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-inf">—</div><div class="kpi-lbl">Rata-rata Inflasi</div></div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab active" data-tab="map">🗺 Peta Dunia</div>
+    <div class="tab" data-tab="scatter">⬤ Scatter &amp; Gap</div>
+    <div class="tab" data-tab="compass">🎯 Inequality Compass</div>
+    <div class="tab" data-tab="trend">📈 Tren Waktu</div>
+    <div class="tab" data-tab="regional">🏛 Regional</div>
+    <div class="tab" data-tab="country">🔍 Profil Negara</div>
+    <div class="tab" data-tab="characteristics">📜 Karakteristik Group</div>
+    <div class="tab" data-tab="explainer">💡 Kausalitas</div>
+  </div>
+
+  <!-- TAB: PETA -->
+  <div class="tab-content active" id="tab-map">
+    <div class="row3">
+      <div class="card">
+        <div class="card-title">Distribusi Income Group per Tahun</div>
+        <div class="card-sub" id="map-sub">—</div>
+        <div id="world-map" style="height:400px;"></div>
+        <div class="insight"><strong>Klasifikasi dinamis:</strong> Income group dihitung ulang setiap tahun berdasarkan GDP per kapita dengan threshold World Bank Atlas Method (High &gt;$13,845 · Upper-Middle $4,466–13,845 · Lower-Middle $1,136–4,465 · Low &lt;$1,136 di tahun 2023, disesuaikan mundur 4%/tahun).</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Rata-rata GDP per Kapita</div>
+        <div class="card-sub">Per income group</div>
+        <div id="gdp-bar" style="height:360px;"></div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <div class="card-title">Distribusi Indikator (Box Plot)</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <select class="sel" id="box-metric" onchange="renderBoxPlot()">
+            <option value="Internet_Usage">Internet Usage (%)</option>
+            <option value="Life_Expectancy">Life Expectancy (Th)</option>
+            <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+            <option value="Inflation">Inflasi (%)</option>
+            <option value="Electricity_Access">Akses Listrik (%)</option>
+            <option value="Water_Access">Akses Air Bersih (%)</option>
+            <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+            <option value="Unemployment">Pengangguran (%)</option>
+            <option value="Urban_Population">Populasi Urban (%)</option>
+            <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+          </select>
+        </div>
+        <div id="box-plot" style="height:300px;"></div>
+        <div class="box-guide-container">
+          <button class="btn-guide" onclick="toggleGuide('box-help')">
+            <i class="bi bi-question-circle"></i> Cara membaca grafik ini
+          </button>
+          <div id="box-help" class="guide-content" style="display:none;">
+            <p>Grafik ini menunjukkan sebaran pembangunan antar negara dalam satu kelompok:</p>
+            <div class="guide-steps">
+              <div class="step"><span class="step-line" style="background:#0f172a"></span><div><strong>Garis Tengah:</strong> Nilai tengah. Separuh negara nilainya lebih tinggi, separuh lagi lebih rendah.</div></div>
+              <div class="step"><span class="step-box" style="background:var(--accent-bg);border:1px solid var(--accent)"></span><div><strong>Kotak:</strong> 50% mayoritas negara berada di rentang ini.</div></div>
+              <div class="step"><span class="step-whisker"></span><div><strong>Garis Lengan:</strong> Rentang nilai yang dianggap normal/umum bagi kelompok tersebut.</div></div>
+              <div class="step"><span class="step-dot" style="background:#ef4444"></span><div><strong>Titik Terpisah:</strong> Negara "pencilan" (outlier) yang nilainya sangat berbeda dari mayoritas.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Komposisi Income Group</div>
+        <div class="card-sub">Proporsi negara · tahun terpilih</div>
+        <div id="donut-chart" style="height:300px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: SCATTER & GAP -->
+  <div class="tab-content" id="tab-scatter">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+        <div><div class="card-title">Scatter: GDP vs Indikator Pembangunan</div><div class="card-sub" id="scatter-sub">—</div></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:11px;color:var(--text2);">Y-Axis:</label>
+          <select class="sel" id="scatter-y" onchange="renderScatter()">
+            <option value="Internet_Usage">Internet Usage (%)</option>
+            <option value="Life_Expectancy">Life Expectancy</option>
+            <option value="Electricity_Access">Akses Listrik (%)</option>
+            <option value="Inflation">Inflasi (%)</option>
+            <option value="Water_Access">Akses Air Bersih (%)</option>
+            <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+            <option value="Unemployment">Pengangguran (%)</option>
+            <option value="Urban_Population">Populasi Urban (%)</option>
+            <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+            <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+          </select>
+          <label style="font-size:11px;color:var(--text2);">Warna:</label>
+          <select class="sel" id="scatter-color" onchange="renderScatter()">
+            <option value="income">Income Group</option>
+            <option value="region">Kawasan</option>
+          </select>
+        </div>
+      </div>
+      <div id="scatter-chart" style="height:480px;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="bi bi-intersect"></i> Analisis Celah Pembangunan (Multi-Layer Gap)</div>
+      <div class="card-sub">Membandingkan performa negara di 10 aspek utama terhadap berbagai referensi</div>
+      
+      <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap; margin-bottom: 20px; background: var(--surface2); padding: 12px 18px; border-radius: 10px;">
+        <div class="sb-lbl" style="margin:0;"><i class="bi bi-search"></i> Pilih Negara:</div>
+        <input class="inp" list="country-datalist" id="gap-country-search" placeholder="Cari negara..." style="width:240px;" onchange="selectCountry(this.value)">
+      </div>
+
+      <div class="gap-controls">
+        <label class="gap-toggle"><input type="checkbox" id="chk-reg" checked onchange="renderMultiLayerGap()"> <span style="color:#16a34a">●</span> Rata-rata Kawasan</label>
+        <label class="gap-toggle"><input type="checkbox" id="chk-target" checked onchange="renderMultiLayerGap()"> <span style="color:#f59e0b">◆</span> Target / Benchmark</label>
+        <label class="gap-toggle"><input type="checkbox" id="chk-prev" checked onchange="renderMultiLayerGap()"> <span style="color:#a855f7">●</span> Tahun Lalu</label>
+      </div>
+
+      <div id="gap-multi-chart" style="height:600px;"></div>
+      <div id="gap-legend" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- TAB: INEQUALITY COMPASS -->
+  <div class="tab-content" id="tab-compass">
+    <div class="card" style="margin-bottom: 20px; padding: 15px 24px;">
+      <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+        <div class="sb-lbl" style="margin:0;"><i class="bi bi-search"></i> Cari & Bandingkan Negara:</div>
+        <input class="inp" list="country-datalist" id="compass-country-search" placeholder="Cari negara..." style="width:240px;" onchange="selectCountry(this.value)">
+      </div>
+    </div>
+    <div class="row3">
+      <div class="card">
+        <div class="card-title"><i class="bi bi-compass"></i> Development Compass: Performa Multidimensi</div>
+        <div class="card-sub">Posisi relatif terhadap standar global (0 - 100)</div>
+        <div id="radar-chart" style="height:500px;"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Analisis Disparitas</div>
+        <div id="disparity-analysis" class="gap-list"></div>
+        <div id="compass-nlg" class="insight" style="margin-top:20px; border-left:4px solid var(--accent); background: var(--surface2); color: var(--text);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: KARAKTERISTIK GROUP -->
+  <div class="tab-content" id="tab-characteristics">
+    <div class="card">
+      <div class="card-title">Profil Tipikal per Income Group</div>
+      <div class="card-sub">Berdasarkan rata-rata indikator pembangunan pada tahun terpilih</div>
+      <div id="char-nlg" class="insight" style="margin-bottom:20px; border-left:4px solid var(--accent); background: var(--surface2); color: var(--text);"></div>
+      <div id="char-grid" class="row2">
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: TREN WAKTU -->
+  <div class="tab-content" id="tab-trend">
+    <div class="card">
+      <div class="card-title">Tren Waktu Multi-Negara (maks. 3)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <input class="inp" list="country-datalist" id="ts-sel" placeholder="Cari negara...">
+        <button class="mbtn on" onclick="addTsCountry()">+ Tambah</button>
+        <select class="sel" id="ts-m1">
+          <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+          <option value="Internet_Usage">Internet Usage (%)</option>
+          <option value="Life_Expectancy">Life Expectancy (Th)</option>
+          <option value="Inflation">Inflasi (%)</option>
+          <option value="Electricity_Access">Akses Listrik (%)</option>
+          <option value="Water_Access">Akses Air Bersih (%)</option>
+          <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+          <option value="Unemployment">Pengangguran (%)</option>
+          <option value="Urban_Population">Populasi Urban (%)</option>
+          <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+        </select>
+        <select class="sel" id="ts-m2">
+          <option value="none">— Y2 (opsional) —</option>
+          <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+          <option value="Internet_Usage">Internet Usage (%)</option>
+          <option value="Life_Expectancy">Life Expectancy (Th)</option>
+          <option value="Inflation">Inflasi (%)</option>
+          <option value="Electricity_Access">Akses Listrik (%)</option>
+          <option value="Water_Access">Akses Air Bersih (%)</option>
+          <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+          <option value="Unemployment">Pengangguran (%)</option>
+          <option value="Urban_Population">Populasi Urban (%)</option>
+          <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+        </select>
+        <button class="mbtn on" id="btn-dual" onclick="setTsMode('dual')">Dual Axis</button>
+        <button class="mbtn" id="btn-norm" onclick="setTsMode('norm')">Indeks Base 100</button>
+      </div>
+      <div class="tag-wrap" id="ts-tags"></div>
+      <div style="height:390px;"><canvas id="ts-chart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- TAB: REGIONAL -->
+  <div class="tab-content" id="tab-regional">
+    <div class="row2">
+      <div class="card">
+        <div class="card-title">Perbandingan Indikator per Kawasan</div>
+        <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <select class="sel" id="reg-metric" onchange="renderRegional()">
+            <option value="Internet_Usage">Internet Usage (%)</option>
+            <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+            <option value="Life_Expectancy">Life Expectancy (Th)</option>
+            <option value="Inflation">Inflasi (%)</option>
+            <option value="Electricity_Access">Akses Listrik (%)</option>
+            <option value="Water_Access">Akses Air Bersih (%)</option>
+            <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+            <option value="Unemployment">Pengangguran (%)</option>
+            <option value="Urban_Population">Populasi Urban (%)</option>
+            <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+          </select>
+        </div>
+        <div style="height:360px;"><canvas id="reg-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Peta Posisi & Sebaran Kawasan</div>
+        <div class="card-sub">Ukuran bubble = GDP rata-rata kawasan</div>
+        <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <select class="sel" id="reg-scatter-x" onchange="renderRegional()">
+            <option value="Internet_Usage">Internet Usage (%)</option>
+            <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+            <option value="Life_Expectancy">Life Expectancy (Th)</option>
+            <option value="Inflation">Inflasi (%)</option>
+            <option value="Electricity_Access">Akses Listrik (%)</option>
+            <option value="Water_Access">Akses Air Bersih (%)</option>
+            <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+            <option value="Unemployment">Pengangguran (%)</option>
+            <option value="Urban_Population">Populasi Urban (%)</option>
+            <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+          </select>
+          <select class="sel" id="reg-scatter-y" onchange="renderRegional()">
+            <option value="Life_Expectancy">Life Expectancy (Th)</option>
+            <option value="GDP_per_capita">GDP per Kapita (USD)</option>
+            <option value="Internet_Usage">Internet Usage (%)</option>
+            <option value="Inflation">Inflasi (%)</option>
+            <option value="Electricity_Access">Akses Listrik (%)</option>
+            <option value="Water_Access">Akses Air Bersih (%)</option>
+            <option value="School_Enrollment">Pendaftaran Sekolah (%)</option>
+            <option value="Unemployment">Pengangguran (%)</option>
+            <option value="Urban_Population">Populasi Urban (%)</option>
+            <option value="Pop_Growth">Pertumbuhan Populasi (%)</option>
+          </select>
+        </div>
+        <div id="reg-scatter" style="height:335px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: PROFIL NEGARA -->
+  <div class="tab-content" id="tab-country">
+    <div class="card">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="card-title" style="margin:0;">Profil Negara</div>
+        <input class="inp" list="country-datalist" id="country-search-main" placeholder="Cari negara..." style="width:240px;" onchange="selectCountry(this.value)">
+      </div>
+      <div id="country-hd" style="margin-bottom:12px;display:none;">
+        <span style="font-size:20px;font-weight:700;" id="c-name">—</span>
+        <span class="income-badge" id="c-badge">—</span>
+        <span style="font-size:12px;color:var(--text3);margin-left:10px;" id="c-region">—</span>
+      </div>
+      <div class="dd-grid" id="dd-grid"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tren Pembangunan</div>
+      <div style="height:360px;"><canvas id="c-trend"></canvas></div>
+      <div class="card-sub">* Skala Kiri: GDP (USD) | Skala Kanan: Indikator lainnya (%)</div>
+    </div>
+  </div>
+
+  <!-- TAB: KAUSALITAS -->
+  <div class="tab-content" id="tab-explainer">
+    <div class="row2" style="margin-bottom: 24px;">
+      <div class="card" style="margin-bottom: 0;">
+        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <div class="card-title">Variabel Analisis</div>
+          <div style="display:flex; gap:8px;">
+            <select class="sel" id="causal-x" onchange="renderCausal()"></select>
+            <select class="sel" id="causal-y" onchange="renderCausal()"></select>
+          </div>
+        </div>
+        <div class="row2" style="height: 220px; grid-template-columns: 1fr 1.5fr;">
+          <div class="corr-main-card">
+            <div class="sb-lbl">Korelasi Global (Pearson r)</div>
+            <div id="pearson-main" style="font-size: 32px; font-weight: 700; color: var(--accent);">0.00</div>
+            <div id="pearson-label" class="card-sub" style="margin-top: 5px;">—</div>
+          </div>
+          <div class="corr-grid" id="pearson-groups"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom: 0;">
+        <div class="card-title">Matriks Korelasi</div>
+        <div class="card-sub">Pearson r untuk semua pasangan indikator</div>
+        <div style="overflow-x: auto;">
+          <table class="heatmap-table" id="corr-matrix"></table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" id="causal-scatter-title">Visualisasi Hubungan</div>
+      <div id="causal-scatter" style="height:500px;"></div>
+    </div>
+  </div>
+</div><!-- /#main -->
+<datalist id="country-datalist"></datalist>
+
+<!-- AI CHAT ANALYST -->
+<div class="ai-fab" onclick="toggleAI()"><i class="bi bi-robot" style="font-size: 24px;"></i></div>
+<div class="ai-drawer" id="ai-drawer">
+  <div class="chat-header">
+    <div class="card-title" style="margin:0;"><i class="bi bi-stars"></i> AI Data Analyst</div>
+    <button class="mbtn" onclick="toggleAI()"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="chat-history" id="chat-history">
+    <div class="msg ai">Halo! Saya analis AI Anda. Ada yang bisa saya bantu jelaskan mengenai data pembangunan global hari ini?</div>
+  </div>
+  <div class="chat-input-area">
+    <div class="typing" id="chat-typing">AI sedang menganalisis <span>.</span><span>.</span><span>.</span></div>
+    <div class="chat-chips">
+      <div class="chip" onclick="sendChat('Negara mana yang paling timpang di Asia?')">Kesenjangan di Asia?</div>
+      <div class="chip" onclick="sendChat('Kenapa inflasi tinggi tapi internet rendah?')">Inflasi vs Internet</div>
+      <div class="chip" onclick="sendChat('Bandingkan Afrika vs Eropa tahun ini')">Afrika vs Eropa</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <input type="text" class="inp" id="chat-input" placeholder="Tanyakan tentang data..." onkeypress="if(event.key==='Enter') sendChat()">
+      <button class="btn-p" onclick="sendChat()" style="padding: 10px 15px;"><i class="bi bi-send"></i></button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /#app -->
+
+<script type="module">
+// Import library resmi Google Generative AI
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai@0.12.0";
+
+// ══════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════
+const CSV_FILES = [
+  { key:'gdp',          path:'GDP per capita.csv',                                        label:'GDP per Capita' },
+  { key:'internet',     path:'Individuals using the Internet.csv',                        label:'Internet Usage' },
+  { key:'life',         path:'Life expectancy at birth, total.csv',                       label:'Life Expectancy' },
+  { key:'inflation',    path:'Inflation, consumer prices.csv',                            label:'Inflasi' },
+  { key:'electricity',  path:'Access to electricity.csv',                                 label:'Akses Listrik' },
+  { key:'water',        path:'People using at least basic drinking water services.csv',   label:'Akses Air Bersih' },
+  { key:'school',       path:'School enrollment, secondary.csv',                          label:'Pendaftaran Sekolah' },
+  { key:'unemployment', path:'Unemployment, total.csv',                                   label:'Pengangguran' },
+  { key:'urban',        path:'Urban population.csv',                                      label:'Populasi Urban' },
+  { key:'popgrowth',    path:'Population growth.csv',                                     label:'Pertumbuhan Populasi' },
+];
+
+// ══════════════════════════════════════════════════════
+// INCOME GROUP CLASSIFIER — World Bank Atlas Method
+// Baseline 2023: High>$13,845 · UM $4,466–13,845 · LM $1,136–4,465 · Low<$1,136
+// Disesuaikan mundur dengan deflator 4%/tahun
+// ══════════════════════════════════════════════════════
+const BASE_YEAR=2023, BASE_HIGH=13845, BASE_UM=4466, BASE_LM=1136, DEFL=0.04;
+function thresholds(year){
+  const f=Math.pow(1+DEFL,BASE_YEAR-year);
+  return {high:BASE_HIGH/f, um:BASE_UM/f, lm:BASE_LM/f};
+}
+function classifyIncome(gdp,year){
+  if(gdp==null||isNaN(gdp)) return 'Unknown';
+  const t=thresholds(year);
+  if(gdp>=t.high) return 'High Income';
+  if(gdp>=t.um)   return 'Upper-Middle Income';
+  if(gdp>=t.lm)   return 'Lower-Middle Income';
+  return 'Low Income';
+}
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let globalData=[], allCountries=[], allYears=[], allRegions=[];
+let tsCountries=[], tsMode='dual';
+let tsChart=null, regChart=null, cTrendChart=null;
+const IG_ORDER=['High Income','Upper-Middle Income','Lower-Middle Income','Low Income'];
+const IG_COL={'High Income':'#10b981','Upper-Middle Income':'#3b82f6','Lower-Middle Income':'#f59e0b','Low Income':'#ef4444'};
+const IG_BG ={'High Income':'#f0fdf4','Upper-Middle Income':'#eff6ff','Lower-Middle Income':'#fffbeb','Low Income':'#fef2f2'};
+const MLBL={GDP_per_capita:'GDP per Kapita (USD)',Internet_Usage:'Internet Usage (%)',Life_Expectancy:'Life Expectancy (Th)',Inflation:'Inflasi (%)',Electricity_Access:'Akses Listrik (%)',Water_Access:'Akses Air Bersih (%)',School_Enrollment:'Pendaftaran Sekolah (%)',Unemployment:'Pengangguran (%)',Urban_Population:'Populasi Urban (%)',Pop_Growth:'Pertumbuhan Populasi (%)'};
+const RCOL={'Afrika':'#e07b39','Africa':'#e07b39','Asia Timur':'#2d6a4f','East Asia':'#2d6a4f','Asia Tenggara':'#1a4e8a','Southeast Asia':'#1a4e8a','Asia Selatan':'#c1440e','South Asia':'#c1440e','Eropa':'#6b3fa0','Europe':'#6b3fa0','Amerika Latin':'#b5860d','Latin America':'#b5860d','Amerika Utara':'#2c7873','North America':'#2c7873','Timur Tengah':'#a0522d','Middle East':'#a0522d','Oseania':'#4a7c59','Oceania':'#4a7c59'};
+
+// ══════════════════════════════════════════════════════
+// PROGRESS
+// ══════════════════════════════════════════════════════
+function setProg(pct,lbl){
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-lbl').textContent=lbl;
+}
+
+// ══════════════════════════════════════════════════════
+// CSV PARSING (wide format, auto-detect delimiter)
+// ══════════════════════════════════════════════════════
+function parseWide(text){
+  const firstLine=text.split('\n')[0];
+  const delim=firstLine.split(';').length>firstLine.split(',').length?';':',';
+  const r=Papa.parse(text.trim(),{header:true,delimiter:delim,skipEmptyLines:true,transformHeader:h=>h.replace(/^\uFEFF/,'').trim()});
+  const out={_meta:{}};
+  r.data.forEach(row=>{
+    const name=(row['Country Name']||'').trim();
+    if(!name) return;
+    out._meta[name]={benua:(row['Benua']||row['Region']||row['Continent']||'').trim()};
+    out[name]={};
+    Object.keys(row).forEach(col=>{
+      const y=col.trim();
+      if(/^\d{4}$/.test(y)){
+        const v=parseFloat((row[col]||'').toString().replace(',','.'));
+        if(!isNaN(v)) out[name][y]=v;
+      }
+    });
+  });
+  return out;
+}
+
+// ══════════════════════════════════════════════════════
+// AUTO FETCH (butuh web server lokal)
+// ══════════════════════════════════════════════════════
+async function autoLoad(){
+  const parsed={};
+  for(let i=0;i<CSV_FILES.length;i++){
+    const {key,path,label}=CSV_FILES[i];
+    setProg(Math.round(i/CSV_FILES.length*80),'Membaca: '+label+'…');
+    try{
+      const res=await fetch(path);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      parsed[key]=parseWide(await res.text());
+    }catch(e){ console.warn('Gagal fetch "'+path+'":',e.message); }
+  }
+  return parsed;
+}
+
+// ══════════════════════════════════════════════════════
+// BUILD DATASET (long format, income group per tahun)
+// ══════════════════════════════════════════════════════
+function buildDataset(parsed){
+  const gdpRaw=parsed['gdp']||{};
+  const countries=new Set();
+  const years=new Set();
+  Object.values(parsed).forEach(p=>{
+    Object.keys(p).forEach(k=>{ if(k!=='_meta') countries.add(k); });
+    Object.values(p).forEach(cv=>{ if(typeof cv==='object'&&cv!==null) Object.keys(cv).forEach(y=>years.add(y)); });
+  });
+  const sortedYears=[...years].sort();
+  const rows=[];
+  countries.forEach(c=>{
+    const benua=gdpRaw._meta?.[c]?.benua||'';
+    sortedYears.forEach(ys=>{
+      const year=+ys;
+      const gdp=parsed['gdp']?.[c]?.[ys]??null;
+      const row={
+        'Country Name':c, Year:year, Benua:benua,
+        'Income Group':classifyIncome(gdp,year),  // ← DINAMIS per tahun
+        GDP_per_capita:      gdp,
+        Internet_Usage:      parsed['internet']?.[c]?.[ys]??null,
+        Life_Expectancy:     parsed['life']?.[c]?.[ys]??null,
+        Inflation:           parsed['inflation']?.[c]?.[ys]??null,
+        Electricity_Access:  parsed['electricity']?.[c]?.[ys]??null,
+        Water_Access:        parsed['water']?.[c]?.[ys]??null,
+        School_Enrollment:   parsed['school']?.[c]?.[ys]??null,
+        Unemployment:        parsed['unemployment']?.[c]?.[ys]??null,
+        Urban_Population:    parsed['urban']?.[c]?.[ys]??null,
+        Pop_Growth:          parsed['popgrowth']?.[c]?.[ys]??null,
+      };
+      if([row.GDP_per_capita,row.Internet_Usage,row.Life_Expectancy].some(v=>v!==null))
+        rows.push(row);
+    });
+  });
+  return rows;
+}
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+async function init(){
+  setProg(5,'Menghubungi server…');
+  try{
+    const parsed=await autoLoad();
+    const loaded=Object.keys(parsed).filter(k=>Object.keys(parsed[k]).length>1);
+    if(!loaded.length) throw new Error('Tidak ada file berhasil dimuat');
+    setProg(88,'Membangun dataset…');
+    globalData=buildDataset(parsed);
+    if(!globalData.length) throw new Error('Dataset kosong');
+    setProg(100,'Selesai!');
+    await delay(200);
+    launch();
+  }catch(err){
+    console.warn('Auto-fetch gagal:',err.message);
+    showFallback();
+  }
+}
+
+function showFallback(){
+  document.getElementById('prog-wrap').style.display='none';
+  document.getElementById('splash-err').style.display='block';
+  document.getElementById('splash-fb').style.display='block';
+  renderFileGrid([]);
+  document.getElementById('file-input').addEventListener('change',e=>handleFiles(e.target.files));
+}
+
+let manualFiles={};
+function renderFileGrid(keys){
+  document.getElementById('file-grid').innerHTML=CSV_FILES.map(({key,label})=>{
+    const ok=keys.includes(key);
+    return `<div class="file-pill ${ok?'ok':'bad'}"><div class="dot" style="background:${ok?'#16a34a':'#dc2626'}"></div>${label}</div>`;
+  }).join('');
+}
+function matchKey(fn){
+  const lo=fn.toLowerCase().replace('.csv','').trim();
+  const p={gdp:['gdp per capita'],internet:['individuals using the internet','internet'],life:['life expectancy'],inflation:['inflation'],electricity:['access to electricity','listrik'],water:['drinking water','water','air'],school:['school enrollment','secondary'],unemployment:['unemployment'],urban:['urban population'],popgrowth:['population growth']};
+  for(const [k,ps] of Object.entries(p)) if(ps.some(x=>lo.includes(x))) return k;
+  return null;
+}
+function handleFiles(files){
+  manualFiles={};
+  for(const f of files){ const k=matchKey(f.name); if(k) manualFiles[k]=f; }
+  renderFileGrid(Object.keys(manualFiles));
+  if(Object.keys(manualFiles).length) document.getElementById('btn-manual').style.display='inline-block';
+}
+async function processCsvFiles(){
+  document.getElementById('btn-manual').disabled=true;
+  document.getElementById('prog-wrap').style.display='block';
+  const parsed={};
+  const keys=Object.keys(manualFiles);
+  for(let i=0;i<keys.length;i++){
+    const k=keys[i];
+    setProg(Math.round(i/keys.length*80),'Membaca: '+manualFiles[k].name);
+    parsed[k]=parseWide(await manualFiles[k].text());
+    await delay(20);
+  }
+  setProg(90,'Membangun dataset…');
+  globalData=buildDataset(parsed);
+  setProg(100,'Selesai!');
+  await delay(200);
+  launch();
+}
+
+// ══════════════════════════════════════════════════════
+// LAUNCH
+// ══════════════════════════════════════════════════════
+function launch(){
+  document.getElementById('splash').classList.add('gone');
+  document.getElementById('app').style.display='block';
+  allYears=[...new Set(globalData.map(d=>d.Year))].sort((a,b)=>a-b);
+  allCountries=[...new Set(globalData.map(d=>d['Country Name']))].sort();
+  allRegions=[...new Set(globalData.map(d=>d.Benua).filter(Boolean))].sort();
+  setupSidebar(); setupCountrySel(); refresh(); renderRegional();
+  selectCountry(allCountries.includes('Indonesia')?'Indonesia':allCountries[0]);
+}
+
+function setupCountrySel(){
+  const datalist = document.getElementById('country-datalist');
+  if(!datalist) return;
+  datalist.innerHTML = '';
+  allCountries.forEach(c=>{ 
+    const o=document.createElement('option'); 
+    o.value=c; 
+    datalist.appendChild(o); 
+  });
+}
+
+function setupSidebar(){
+  const sl=document.getElementById('filter-year');
+  sl.min=allYears[0]; sl.max=allYears[allYears.length-1];
+  sl.value=Math.min(2020,allYears[allYears.length-1]);
+  document.getElementById('yr-disp').textContent=sl.value;
+  const rsel=document.getElementById('filter-region');
+  allRegions.forEach(r=>{ const o=document.createElement('option'); o.value=o.textContent=r; rsel.appendChild(o); });
+  sl.addEventListener('input',e=>{ document.getElementById('yr-disp').textContent=e.target.value; refresh(); });
+  rsel.addEventListener('change',refresh);
+  // TS select
+  document.getElementById('ts-m1').addEventListener('change',renderTS);
+  document.getElementById('ts-m2').addEventListener('change',renderTS);
+
+  // Setup Causal Selects
+  const cx = document.getElementById('causal-x');
+  const cy = document.getElementById('causal-y');
+  Object.entries(MLBL).forEach(([k,v]) => {
+    const ox = document.createElement('option'); ox.value = k; ox.textContent = v.split('(')[0];
+    const oy = document.createElement('option'); oy.value = k; oy.textContent = v.split('(')[0];
+    cx.appendChild(ox); cy.appendChild(oy);
+  });
+  cx.value = 'GDP_per_capita';
+  cy.value = 'Internet_Usage';
+}
+
+// Inisialisasi Gemini AI
+const API_KEY = "";
+const genAI = new GoogleGenerativeAI(API_KEY);
+const MODEL_NAME = "gemini-3-flash-preview"; 
+
+window.setCorrelationPair = function(x, y) {
+    document.getElementById('causal-x').value = x;
+    document.getElementById('causal-y').value = y;
+    renderCausal();
+    document.getElementById('causal-scatter').scrollIntoView({behavior: 'smooth'});
+};
+
+window.toggleGuide = function(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+/** AI CHAT ANALYST LOGIC **/
+let chatHistory = [];
+window.toggleAI = function() { document.getElementById('ai-drawer').classList.toggle('open'); }
+
+window.toggleSidebar = function() {
+    document.body.classList.toggle('collapsed');
+    // Memaksa Plotly untuk menyesuaikan ukuran grafik setelah sidebar ditutup/dibuka
+    window.dispatchEvent(new Event('resize'));
+};
+
+function buildSystemPrompt() {
+    const yr = getYear(), reg = getRegion(), igs = getGroups().join(', '), fd = filtered(yr);
+    
+    // Fungsi pembantu jika d3 tidak terdeteksi
+    const calcAvg = (arr, key) => {
+        const values = arr.map(d => d[key]).filter(v => v != null);
+        return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    };
+
+    const stats = {
+        n: fd.length,
+        gdp: calcAvg(fd, 'GDP_per_capita'),
+        inet: calcAvg(fd, 'Internet_Usage'),
+        life: calcAvg(fd, 'Life_Expectancy'),
+        inf: calcAvg(fd, 'Inflation'),
+        counts: {hi:0, um:0, lm:0, lo:0}
+    };
+    fd.forEach(d => {
+        if(d['Income Group'].includes('High')) stats.counts.hi++;
+        else if(d['Income Group'].includes('Upper')) stats.counts.um++;
+        else if(d['Income Group'].includes('Lower')) stats.counts.lm++;
+        else stats.counts.lo++;
+    });
+    return `Kamu adalah analis data pembangunan global. Kamu memiliki akses ke snapshot data World Bank tahun ${yr}.
+    Filter aktif: kawasan = ${reg}, income group = ${igs}.
+    Ringkasan statistik data saat ini:
+    - Jumlah negara: ${stats.n}
+    - Rata-rata GDP per kapita: $${Math.round(stats.gdp).toLocaleString()}
+    - Rata-rata Internet Usage: ${stats.inet.toFixed(1)}%
+    - Rata-rata Life Expectancy: ${stats.life.toFixed(1)} thn
+    - Rata-rata Inflasi: ${stats.inf.toFixed(2)}%
+    - Distribusi income group: High=${stats.counts.hi}, UpperMid=${stats.counts.um}, LowerMid=${stats.counts.lm}, Low=${stats.counts.lo}
+    Jawab dalam Bahasa Indonesia berdasarkan data statistik di atas. Jika ditanya pertanyaan langsung, jawablah langsung sesingkat mungkin dan langsung ke intinya. Namun, jika pertanyaan membutuhkan penjelasan atau analisis, berikan penjelasan yang lengkap, komprehensif dan langsung ke intinya maksimal 3 paragraf.`;
+}
+
+window.sendChat = async function(msg) {
+    const input = document.getElementById('chat-input');
+    const text = msg || input.value.trim();
+    if (!text || document.getElementById('chat-typing').style.display === 'block') return;
+    
+    input.value = "";
+    const historyEl = document.getElementById('chat-history');
+    historyEl.innerHTML += `<div class="msg user">${text}</div>`;
+    historyEl.scrollTop = historyEl.scrollHeight;
+
+    document.getElementById('chat-typing').style.display = 'block';
+
+    try {
+        // Setup model dengan System Instruction
+        const model = genAI.getGenerativeModel({ 
+            model: MODEL_NAME,
+            systemInstruction: { parts: [{ text: buildSystemPrompt() }] }
+        });
+        
+        // Memulai sesi chat dengan riwayat yang ada
+        const chat = model.startChat({
+            history: chatHistory,
+            generationConfig: { temperature: 0.7 }
+        });
+
+        const result = await chat.sendMessage(text);
+        const response = await result.response;
+        const aiMsg = response.text();
+
+        // Format Markdown sederhana agar respons AI lebih mudah dibaca
+        const formattedMsg = aiMsg
+            .replace(/(^|\n)###?\s+(.*?)(?=\n|$)/g, '$1<strong>$2</strong>') // Ubah header markdown (## atau ###) menjadi bold
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Ubah **text** menjadi bold
+            .replace(/(^|\s)\*([^\s*][^*\n]*?)\*(?=$|\s|[.,?!;])/g, '$1<strong>$2</strong>') // Ubah *text* tunggal menjadi bold (tanpa merusak bullet)
+            .replace(/(^|\n)\*\s/g, '$1• ') // Ubah markdown list (* item) menjadi simbol bullet (•)
+            .replace(/\n/g, '<br>'); // Ubah karakter enter menjadi baris baru HTML
+            
+        historyEl.innerHTML += `<div class="msg ai">${formattedMsg}</div>`;
+        
+        // Update riwayat lokal untuk konteks berikutnya
+        chatHistory.push({ role: "user", parts: [{ text: text }] });
+        chatHistory.push({ role: "model", parts: [{ text: aiMsg }] });
+
+    } catch (e) {
+        console.error(e);
+        let errorDetail = "Terjadi kesalahan. Pastikan API Key benar dan Anda tidak melebihi batas kuota Free Tier (15 RPM).";
+        
+        if (e.message.includes('429')) {
+            errorDetail = "⚠️ Batas kuota tercapai (Too Many Requests). Mohon tunggu sebentar sebelum mengirim pesan lagi.";
+        } else if (e.message.includes('404')) {
+            errorDetail = "⚠️ Model tidak ditemukan (404). Pastikan 'Generative Language API' sudah diaktifkan di Google Cloud Console untuk API Key Anda.";
+        }
+
+        historyEl.innerHTML += `<div class="msg ai" style="color:var(--low)">⚠️ <strong>Kesalahan:</strong> ${errorDetail}</div>`;
+    } finally {
+        document.getElementById('chat-typing').style.display = 'none';
+        historyEl.scrollTop = historyEl.scrollHeight;
+    }
+};
+
+/** CAUSAL LOGIC (Fixed) **/
+function pearson(data, xKey, yKey) {
+    const valid = data.filter(d => d[xKey] != null && d[yKey] != null);
+    const n = valid.length;
+    if (n < 2) return 0;
+    let sX=0, sY=0, sXY=0, sX2=0, sY2=0;
+    valid.forEach(d => {
+        const x = Number(d[xKey]), y = Number(d[yKey]);
+        sX+=x; sY+=y; sXY+=x*y; sX2+=x*x; sY2+=y*y;
+    });
+    const num = (n*sXY) - (sX*sY);
+    const den = Math.sqrt(((n*sX2)-(sX*sX)) * ((n*sY2)-(sY*sY)));
+    return den === 0 ? 0 : num/den;
+}
+
+window.renderCausal = function() {
+    const yr = getYear(), fd = filtered(yr), xK = document.getElementById('causal-x').value, yK = document.getElementById('causal-y').value;
+    const r = pearson(fd, xK, yK);
+    document.getElementById('pearson-main').textContent = r.toFixed(2);
+    document.getElementById('pearson-label').textContent = Math.abs(r) > 0.7 ? "Korelasi Kuat" : (Math.abs(r) > 0.4 ? "Korelasi Sedang" : "Korelasi Lemah");
+    
+    let gH = "";
+    IG_ORDER.forEach(ig => {
+        const gr = pearson(fd.filter(d => d['Income Group'] === ig), xK, yK);
+        gH += `<div class="corr-sub-card"><div class="sb-lbl" style="font-size:8px;">${ig.split(' ')[0]}</div><div style="font-weight:700;color:${IG_COL[ig]}">${gr.toFixed(2)}</div></div>`;
+    });
+    document.getElementById('pearson-groups').innerHTML = gH;
+
+    const traces = IG_ORDER.map(ig => {
+        const gd = fd.filter(d => d['Income Group'] === ig && d[xK]!=null && d[yK]!=null);
+        return gd.length ? { x: gd.map(d=>d[xK]), y: gd.map(d=>d[yK]), mode:'markers', name:ig, marker:{color:IG_COL[ig], size:8, opacity:0.6}, text:gd.map(d=>d['Country Name']) } : null;
+    }).filter(Boolean);
+    
+    Plotly.react('causal-scatter', traces, { xaxis:{title:MLBL[xK]}, yaxis:{title:MLBL[yK]}, margin:{t:20}, paper_bgcolor:'transparent', plot_bgcolor:'transparent', legend:{orientation:'h', y:-0.2} }, {responsive: true, displayModeBar: true});
+
+    const mtrx = Object.keys(MLBL);
+    let tH = "<tr><th></th>" + mtrx.map(m => `<th>${m.substring(0,3)}</th>`).join('') + "</tr>";
+    mtrx.forEach(rk => {
+        tH += `<tr><th style="font-size:8px;">${rk.substring(0,5)}</th>`;
+        mtrx.forEach(ck => {
+            const v = pearson(fd, rk, ck);
+            tH += `<td onclick="setCorrelationPair('${rk}','${ck}')" style="background:rgba(59,130,246,${Math.abs(v)}); color:${Math.abs(v)>0.5?'#fff':'#000'}">${v.toFixed(2)}</td>`;
+        });
+        tH += "</tr>";
+    });
+    document.getElementById('corr-matrix').innerHTML = tH;
+};
+
+// ══════════════════════════════════════════════════════
+// FILTERS
+// ══════════════════════════════════════════════════════
+window.getYear = function(){ return +document.getElementById('filter-year').value; };
+window.getRegion = function(){ return document.getElementById('filter-region').value; };
+window.getGroups = function(){ return [...document.querySelectorAll('.ip-pills input:checked')].map(c=>c.value); };
+function filtered(year){
+  const r=getRegion(), g=getGroups();
+  return globalData.filter(d=>d.Year===year&&(r==='all'||d.Benua===r)&&g.includes(d['Income Group']));
+}
+
+window.refresh = function(){
+  const yr=getYear(), fd=filtered(yr);
+  // KPIs
+  document.getElementById('kpi-total').textContent=[...new Set(fd.map(d=>d['Country Name']))].length;
+  document.getElementById('kpi-high').textContent=fd.filter(d=>d['Income Group']==='High Income').length;
+  document.getElementById('kpi-um').textContent=fd.filter(d=>d['Income Group']==='Upper-Middle Income').length;
+  document.getElementById('kpi-lm').textContent=fd.filter(d=>d['Income Group']==='Lower-Middle Income').length;
+  document.getElementById('kpi-low').textContent=fd.filter(d=>d['Income Group']==='Low Income').length;
+  const infs=fd.filter(d=>d.Inflation!=null).map(d=>d.Inflation);
+  document.getElementById('kpi-inf').textContent=infs.length?(infs.reduce((a,b)=>a+b,0)/infs.length).toFixed(2)+'%':'—';
+  renderMap(fd,yr);
+  renderGDPBar(fd);
+  renderBoxPlot();
+  renderDonut(fd);
+  renderScatter();
+  renderMultiLayerGap();
+  renderCompass();
+  renderCharacteristics();
+  renderCausal();
+  updateCountryProfileGrid();
+  renderRegional();
+};
+
+// ══════════════════════════════════════════════════════
+// WORLD MAP — Plotly choropleth, responsif ke tahun
+// ══════════════════════════════════════════════════════
+function renderMap(data,year){
+  document.getElementById('map-sub').textContent=data.length+' negara · tahun '+year;
+  const igIdx={'High Income':0,'Upper-Middle Income':1,'Lower-Middle Income':2,'Low Income':3};
+  Plotly.react('world-map',[{
+    type:'choropleth', locationmode:'country names',
+    locations:data.map(d=>d['Country Name']),
+    z:data.map(d=>igIdx[d['Income Group']]??-1),
+    text:data.map(d=>`<b>${d['Country Name']}</b><br>Group: ${d['Income Group']}<br>GDP: ${d.GDP_per_capita!=null?'$'+Math.round(d.GDP_per_capita).toLocaleString():'N/A'}<br>Benua: ${d.Benua||'N/A'}`),
+    hoverinfo:'text',
+    colorscale:[[0,'#10b981'],[0.34,'#3b82f6'],[0.67,'#f59e0b'],[1,'#ef4444']],
+    zmin:0, zmax:3, showscale:false,
+  }],{
+    margin:{r:0,t:4,l:0,b:0}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    geo:{projection:{type:'robinson'},showframe:false,showcoastlines:true,coastlinecolor:'#e2e8f0',showland:true,landcolor:'#f1f5f9',showocean:true,oceancolor:'#f8fafc',bgcolor:'transparent'},
+  },{responsive:true,displayModeBar:false});
+}
+
+// ══════════════════════════════════════════════════════
+// GDP BAR — Plotly
+// ══════════════════════════════════════════════════════
+function renderGDPBar(data){
+  const gs=getGroups().filter(g=>IG_ORDER.includes(g));
+  const avgs=gs.map(g=>{
+    const vs=data.filter(d=>d['Income Group']===g&&d.GDP_per_capita!=null).map(d=>d.GDP_per_capita);
+    return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:0;
+  });
+  Plotly.react('gdp-bar',[{
+    x:gs.map(g=>g.replace(' Income','')), y:avgs, type:'bar',
+    marker:{color:gs.map(g=>IG_COL[g])},
+    text:avgs.map(v=>'$'+Math.round(v).toLocaleString()), textposition:'outside', cliponaxis:false,
+  }],{margin:{t:35,b:60,l:60,r:10},paper_bgcolor:'transparent',plot_bgcolor:'transparent',yaxis:{title:'USD',gridcolor:'#e2e8f0',tickfont:{color:'#64748b'},autorange:true},xaxis:{tickfont:{size:10,color:'#64748b'}},font:{family:'DM Sans',size:11,color:'#0f172a'}},{responsive:true,displayModeBar:false});
+}
+
+// ══════════════════════════════════════════════════════
+// BOX PLOT — Plotly
+// ══════════════════════════════════════════════════════
+window.renderBoxPlot = function(){
+  const yr=getYear(), m=document.getElementById('box-metric').value;
+  const data=filtered(yr), gs=getGroups();
+  const traces=gs.map(g=>({
+    y:data.filter(d=>d['Income Group']===g&&d[m]!=null).map(d=>d[m]),
+    type:'box', 
+    name:g.replace(' Income',''), 
+    marker:{
+      color:IG_COL[g],
+      outliercolor: '#ef4444',
+      line: { outliercolor: '#ef4444', outlierwidth: 1 }
+    },
+    fillcolor: IG_BG[g].replace(')', ', 0.5)').replace('rgb', 'rgba'),
+    line: { width: 2 },
+    boxpoints:'outliers', 
+    jitter:.3,
+    hovertemplate: 
+      "<b>Kelompok %{fullData.name}</b><br><br>" +
+      "↑ Nilai tertinggi normal: %{upperfence}<br>" +
+      "⬚ Batas atas (75% negara): %{q3}<br>" +
+      "━ <b>Nilai tengah: %{median}</b><br>" +
+      "⬚ Batas bawah (25% negara): %{q1}<br>" +
+      "↓ Nilai terendah normal: %{lowerfence}<br>" +
+      "<extra>Info: Separuh negara berada di atas/bawah nilai tengah</extra>"
+  }));
+  Plotly.react('box-plot',traces,{
+    margin:{t:14,b:40,l:40,r:10},
+    paper_bgcolor:'transparent',
+    plot_bgcolor:'transparent',
+    showlegend:false,
+    yaxis:{title:MLBL[m],gridcolor:'#e2e8f0',tickfont:{color:'#64748b'}},
+    xaxis:{tickfont:{color:'#64748b'}},
+    font:{family:'DM Sans',size:11,color:'#0f172a'},
+    hoverlabel: { bgcolor: "#fff", bordercolor: "#e2e8f0", font: { family: 'DM Sans', size: 12 } }
+  },{responsive:true,displayModeBar:false});
+};
+
+// ══════════════════════════════════════════════════════
+// DONUT — Plotly
+// ══════════════════════════════════════════════════════
+function renderDonut(data){
+  Plotly.react('donut-chart',[{
+    labels:IG_ORDER, values:IG_ORDER.map(g=>data.filter(d=>d['Income Group']===g).length),
+    type:'pie', hole:.55, marker:{colors:IG_ORDER.map(g=>IG_COL[g])},
+    textinfo:'label+percent', textfont:{size:10},
+  }],{margin:{t:10,b:10,l:10,r:10},paper_bgcolor:'transparent',showlegend:false,font:{family:'DM Sans',size:11}},{responsive:true,displayModeBar:false});
+}
+
+// ══════════════════════════════════════════════════════
+// SCATTER — Plotly
+// ══════════════════════════════════════════════════════
+window.renderScatter = function(){
+  const yr=getYear(), yKey=document.getElementById('scatter-y').value, colorBy=document.getElementById('scatter-color').value;
+  const data=filtered(yr).filter(d=>d.GDP_per_capita!=null&&d[yKey]!=null);
+  document.getElementById('scatter-sub').textContent=data.length+' titik data · tahun '+yr;
+  const grps={};
+  data.forEach(d=>{ const k=colorBy==='income'?d['Income Group']:(d.Benua||'Lainnya'); if(!grps[k]) grps[k]=[]; grps[k].push(d); });
+  const traces=Object.entries(grps).map(([g,rows])=>({
+    x:rows.map(d=>d.GDP_per_capita), y:rows.map(d=>d[yKey]),
+    mode:'markers', name:g,
+    text:rows.map(d=>d['Country Name']),
+    hovertemplate:'<b>%{text}</b><br>GDP: $%{x:,.0f}<br>'+MLBL[yKey]+': %{y:.1f}<extra></extra>',
+    marker:{color:colorBy==='income'?IG_COL[g]:(RCOL[g]||'#888'),size:9,opacity:.75,line:{width:.5,color:'#fff'}},
+  }));
+  const pts=data.map(d=>({x:Math.log10(d.GDP_per_capita),y:d[yKey]}));
+  const reg=linReg(pts);
+  if(reg){
+    const xArr=data.map(d=>d.GDP_per_capita);
+    const xMin=Math.log10(Math.min(...xArr)), xMax=Math.log10(Math.max(...xArr));
+    const xs=Array.from({length:40},(_,i)=>xMin+i*(xMax-xMin)/39);
+    traces.push({x:xs.map(x=>Math.pow(10,x)),y:xs.map(x=>reg(x)),mode:'lines',name:'Regresi',line:{color:'#94a3b8',dash:'dot',width:1.5},hoverinfo:'skip'});
+  }
+  Plotly.react('scatter-chart',traces,{
+    xaxis:{title:'GDP per Kapita (Log Scale)',type:'log',gridcolor:'#e2e8f0',tickfont:{color:'#64748b'}},
+    yaxis:{title:MLBL[yKey],gridcolor:'#e2e8f0',tickfont:{color:'#64748b'}},
+    paper_bgcolor:'transparent',plot_bgcolor:'transparent',
+    hovermode:'closest',legend:{orientation:'h',y:-0.18,font:{size:10}},
+    margin:{t:14,b:60,l:60,r:20},font:{family:'DM Sans',size:11,color:'#0f172a'},
+  },{responsive:true,displayModeBar:false});
+};
+
+// ══════════════════════════════════════════════════════
+// MULTI-LAYER GAP ANALYSIS (Dot Plot)
+// ══════════════════════════════════════════════════════
+const TARGETS = {
+  GDP_per_capita: 40000, Internet_Usage: 100, Life_Expectancy: 85, Inflation: 2,
+  Electricity_Access: 100, Water_Access: 100, School_Enrollment: 100,
+  Unemployment: 4, Urban_Population: 80, Pop_Growth: 1.2
+};
+
+const SHORT_LBL = {
+  GDP_per_capita: 'GDP', Internet_Usage: 'Internet', Life_Expectancy: 'Harapan Hidup', 
+  Inflation: 'Inflasi', Electricity_Access: 'Listrik', Water_Access: 'Air Bersih', 
+  School_Enrollment: 'Sekolah', Unemployment: 'Pengangguran', 
+  Urban_Population: 'Pop. Urban', Pop_Growth: 'Pertumbuhan Pop.'
+};
+
+window.renderMultiLayerGap = function() {
+  const name = document.getElementById('country-search-main').value || 'Indonesia';
+  const yr = getYear();
+  const metrics = Object.keys(MLBL);
+  
+  const countryData = globalData.find(d => d['Country Name'] === name && d.Year === yr);
+  if (!countryData) return;
+
+  const prevYearData = globalData.find(d => d['Country Name'] === name && d.Year === yr - 1);
+  const regData = globalData.filter(d => d.Year === yr && d.Benua === countryData.Benua);
+  
+  const showReg = document.getElementById('chk-reg').checked;
+  const showTarget = document.getElementById('chk-target').checked;
+  const showPrev = document.getElementById('chk-prev').checked;
+
+  // Normalisasi 0-100 untuk visualisasi (termasuk inversi untuk Inflasi/Pengangguran)
+  const normalize = (m, val) => {
+    let vals = globalData.filter(d => d.Year === yr && d[m] != null).map(d => d[m]);
+    if (!vals.length || val == null) return null;
+    
+    let v = val;
+    // Gunakan skala logaritmik untuk mengatasi ketimpangan distribusi data GDP
+    if (m === 'GDP_per_capita') {
+      vals = vals.map(x => Math.log10(x > 0 ? x : 1));
+      v = Math.log10(v > 0 ? v : 1);
+    }
+
+    const min = Math.min(...vals), max = Math.max(...vals);
+    if (max === min) return null;
+    
+    let res = ((val - min) / (max - min)) * 100;
+    if (m === 'Inflation' || m === 'Unemployment') res = 100 - res;
+    return res;
+  };
+
+  const labels = metrics.map(m => SHORT_LBL[m]);
+  const traces = [];
+
+  metrics.forEach((m, i) => {
+    const act = normalize(m, countryData[m]);
+    const regAvg = normalize(m, regData.reduce((a, b) => a + (b[m] || 0), 0) / regData.length);
+    
+    if (act !== null && regAvg !== null && showReg) {
+      traces.push({
+        x: [regAvg, act], y: [labels[i], labels[i]], mode: 'lines',
+        line: { color: act >= regAvg ? 'rgba(22, 163, 74, 0.4)' : 'rgba(220, 38, 38, 0.4)', width: 2 },
+        showlegend: false, hoverinfo: 'skip'
+      });
+    }
+  });
+
+  // Layer 4: Tahun Lalu
+  if (showPrev) {
+    traces.push({
+      x: metrics.map(m => normalize(m, prevYearData?.[m])), y: labels,
+      mode: 'markers', name: 'Tahun Lalu', marker: { color: '#a855f7', size: 8, opacity: 0.5 },
+      hovertemplate: 'Tahun Lalu: %{x:.1f} pts<extra></extra>'
+    });
+  }
+
+  // Layer 3: Target
+  if (showTarget) {
+    traces.push({
+      x: metrics.map(m => normalize(m, TARGETS[m])), y: labels,
+      mode: 'markers', name: 'Target', marker: { color: '#f59e0b', size: 10, symbol: 'diamond' },
+      hovertemplate: 'Target: %{x:.1f} pts<extra></extra>'
+    });
+  }
+
+  // Layer 2: Rata-rata Kawasan
+  if (showReg) {
+    traces.push({
+      x: metrics.map(m => normalize(m, regData.reduce((a, b) => a + (b[m] || 0), 0) / regData.length)),
+      y: labels, mode: 'markers', name: 'Rata-rata Kawasan', marker: { color: '#16a34a', size: 10 },
+      hovertemplate: 'Rata-rata Kawasan: %{x:.1f} pts<extra></extra>'
+    });
+  }
+
+  // Layer 1: Aktual (Data Utama)
+  traces.push({
+    x: metrics.map(m => normalize(m, countryData[m])), y: labels,
+    mode: 'markers', name: 'Aktual (' + name + ')', marker: { color: '#3b82f6', size: 14, line: { color: '#fff', width: 2 } },
+    hovertemplate: '<b>%{y}</b><br>Skor Aktual: %{x:.1f} pts<extra></extra>'
+  });
+
+  const layout = {
+    margin: { l: 120, r: 20, t: 20, b: 50 },
+    xaxis: { title: 'Skor Pembangunan (0 - 100)', range: [-5, 105], gridcolor: '#e2e8f0' },
+    yaxis: { automargin: true, gridcolor: '#f1f5f9' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    showlegend: true, legend: { orientation: 'h', y: -0.15 },
+    hovermode: 'closest'
+  };
+
+  Plotly.react('gap-multi-chart', traces, layout, { responsive: true, displayModeBar: false });
+  renderGapLegend();
+};
+
+function renderGapLegend() {
+  const container = document.getElementById('gap-legend');
+  container.innerHTML = `
+    <div style="font-size:11px; color:var(--text2); display:flex; gap:15px; flex-wrap:wrap; background:var(--surface2); padding:10px; border-radius:8px;">
+      <span><b style="color:#16a34a">━</b> Garis Hijau: Di atas rata-rata kawasan ✓</span>
+      <span><b style="color:#dc2626">━</b> Garis Merah: Di bawah rata-rata kawasan ✗</span>
+      <span style="opacity:0.7 italic">Semua nilai dinormalisasi 0-100 (100 = performa terbaik global)</span>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════
+// INEQUALITY COMPASS (Radar Chart)
+// ══════════════════════════════════════════════════════
+window.renderCompass = function() {
+  const name = document.getElementById('country-search-main').value || 'Indonesia';
+  const yr = getYear();
+  const yrData = globalData.filter(d => d.Year === yr);
+  let country = yrData.find(d => d['Country Name'] === name);
+  
+  let isFallback = false;
+  let targetYr = yr;
+  if (!country) {
+    const countryRows = globalData.filter(d => d['Country Name'] === name).sort((a,b) => a.Year - b.Year);
+    if (!countryRows.length) return;
+    country = [...countryRows].reverse().find(d => d.GDP_per_capita != null) || countryRows[countryRows.length - 1];
+    targetYr = country.Year;
+    isFallback = true;
+  }
+
+  const metrics = Object.keys(MLBL);
+  const ig = country['Income Group'];
+  const igData = yrData.filter(d => d['Income Group'] === ig);
+  const labels = metrics.map(m => MLBL[m].split('(')[0].trim());
+
+  let yrInfo = document.getElementById('compass-year-info');
+  if(!yrInfo) {
+      yrInfo = document.createElement('div');
+      yrInfo.id = 'compass-year-info';
+      yrInfo.style.fontSize = '12px';
+      yrInfo.style.color = 'var(--text2)';
+      yrInfo.style.marginBottom = '12px';
+      yrInfo.style.padding = '5px 10px';
+      yrInfo.style.background = 'rgba(59, 130, 246, 0.08)';
+      yrInfo.style.borderRadius = '6px';
+      yrInfo.style.display = 'inline-block';
+      const radarChart = document.getElementById('radar-chart');
+      radarChart.parentNode.insertBefore(yrInfo, radarChart);
+  }
+  
+  if (isFallback) {
+      yrInfo.innerHTML = `<i class="bi bi-info-circle"></i> Menampilkan data <strong>Tahun ${targetYr}</strong> (Data ${yr} belum tersedia)`;
+  } else {
+      yrInfo.innerHTML = `<i class="bi bi-calendar-check"></i> Menampilkan data <strong>Tahun ${targetYr}</strong> (Sesuai dengan menu filter)`;
+  }
+
+  // Helper to normalize 0-100 based on global min-max in that year
+  const getVal = (c, m) => {
+    let vals = yrData.map(d => d[m]).filter(v => v != null);
+    if (!vals.length) return 0;
+    
+    let v = c[m];
+    if (v == null) return 0;
+    // Gunakan skala logaritmik untuk mengatasi ketimpangan distribusi data GDP
+    if (m === 'GDP_per_capita') {
+      vals = vals.map(x => Math.log10(x > 0 ? x : 1));
+      v = Math.log10(v > 0 ? v : 1);
+    }
+    
+    const min = Math.min(...vals), max = Math.max(...vals);
+    if (max === min) return 0;
+    
+    let res = ((v - min) / (max - min)) * 100;
+    if (m === 'Unemployment' || m === 'Inflation') res = ((max - v) / (max - min)) * 100;
+    return Math.max(0, Math.min(100, res));
+  };
+
+  const countryVals = metrics.map(m => getVal(country, m));
+  const igAvgVals = metrics.map(m => {
+    const avgs = igData.map(d => getVal(d, m)).filter(v => v != null);
+    return avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
+  });
+  const globalAvgVals = metrics.map(m => {
+    const avgs = yrData.map(d => getVal(d, m)).filter(v => v != null);
+    return avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
+  });
+
+  const traces = [
+    {
+      type: 'scatterpolar',
+      r: globalAvgVals,
+      theta: labels,
+      fill: 'toself',
+      name: 'Rata-rata Global',
+      line: { color: '#94a3b8' },
+      fillcolor: 'rgba(148, 163, 184, 0.2)'
+    },
+    {
+      type: 'scatterpolar',
+      r: igAvgVals,
+      theta: labels,
+      fill: 'toself',
+      name: 'Rata-rata ' + ig.replace(' Income',''),
+      line: { color: IG_COL[ig] },
+      fillcolor: IG_BG[ig].replace(')', ', 0.3)').replace('rgb', 'rgba')
+    },
+    {
+      type: 'scatterpolar',
+      r: countryVals,
+      theta: labels,
+      fill: 'toself',
+      name: name,
+      line: { color: '#3b82f6', width: 4 },
+      marker: { size: 8, symbol: 'circle' },
+      fillcolor: 'rgba(59, 130, 246, 0.1)'
+    }
+  ];
+
+  Plotly.react('radar-chart', traces, {
+    polar: { radialaxis: { visible: true, range: [0, 100] }, bgcolor: 'transparent' },
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.2 },
+    margin: { t: 40, b: 40, l: 60, r: 60 },
+    paper_bgcolor: 'transparent'
+  }, { responsive: true, displayModeBar: false });
+
+  // Render Disparity Table
+  const analysis = metrics.map((m, i) => {
+    const diff = countryVals[i] - igAvgVals[i];
+    return `<div class="gap-row">
+      <div class="gap-country" style="width:120px; font-size:11px;">${labels[i]}</div>
+      <div class="gap-bw" style="height:6px;"><div class="gap-bar" style="width:${countryVals[i]}%; background:${diff >= 0 ? 'var(--high)' : 'var(--low)'}"></div></div>
+      <div class="gap-score" style="font-size:11px; width:60px; color:${diff >= 0 ? 'var(--high)' : 'var(--low)'}">${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(0)} pts</div>
+    </div>`;
+  }).join('');
+  document.getElementById('disparity-analysis').innerHTML = analysis;
+
+  // NLG Narration
+  const nlgCont = document.getElementById('compass-nlg');
+  let strengths = [], weaknesses = [];
+  metrics.forEach((m, i) => {
+    const diff = countryVals[i] - igAvgVals[i];
+    if (diff > 15) strengths.push(labels[i]);
+    else if (diff < -15) weaknesses.push(labels[i]);
+  });
+
+  let text = `<strong>Ringkasan Eksekutif:</strong> ${name} menunjukkan profil pembangunan yang `;
+  if (strengths.length > weaknesses.length) text += `unggul dibandingkan rata-rata kelompok <em>${ig}</em>. `;
+  else if (weaknesses.length > strengths.length) text += `memiliki tantangan signifikan dibandingkan rata-rata kelompok <em>${ig}</em>. `;
+  else text += `seimbang dengan rata-rata kelompok <em>${ig}</em>. `;
+
+  if (strengths.length) text += `<br><br>🚀 <strong>Keunggulan:</strong> Terlihat sangat kuat pada aspek <u>${strengths.join(', ')}</u>. `;
+  if (weaknesses.length) text += `<br><br>⚠️ <strong>Prioritas:</strong> Memerlukan perhatian lebih pada <u>${weaknesses.join(', ')}</u> untuk mengejar ketertinggalan dari rekan sekelompoknya.`;
+  
+  nlgCont.innerHTML = text;
+};
+
+// ══════════════════════════════════════════════════════
+// INCOME GROUP CHARACTERISTICS
+// ══════════════════════════════════════════════════════
+window.renderCharacteristics = function() {
+  const yr = getYear();
+  const yrData = globalData.filter(d => d.Year === yr);
+  const metrics = DD_FIELDS.map(f => f.k);
+  
+  const prevYr = allYears[allYears.indexOf(yr) - 1];
+  const prevYrData = prevYr ? globalData.filter(d => d.Year === prevYr) : null;
+  let shifts = [];
+
+  const html = IG_ORDER.map(ig => {
+    const groupData = yrData.filter(d => d['Income Group'] === ig);
+    const count = groupData.length;
+    
+    if (prevYrData) {
+      const prevCount = prevYrData.filter(d => d['Income Group'] === ig).length;
+      const diff = count - prevCount;
+      if (diff !== 0) shifts.push(`<strong>${ig}</strong> (${diff > 0 ? '↑' : '↓'}${Math.abs(diff)})`);
+    }
+
+    if (count === 0) return '';
+
+    const avgs = metrics.reduce((acc, m) => {
+      const vals = groupData.map(d => d[m]).filter(v => v != null);
+      acc[m] = vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+      return acc;
+    }, {});
+
+    let desc = "";
+    if (ig === 'High Income') desc = "Infrastruktur digital hampir universal dengan standar kesehatan tinggi.";
+    else if (ig === 'Upper-Middle Income') desc = "Transisi industri ke digital sedang berlangsung pesat.";
+    else if (ig === 'Lower-Middle Income') desc = "Fokus pada perluasan akses dasar dan urbanisasi.";
+    else desc = "Ketergantungan tinggi pada sektor primer dan tantangan akses dasar.";
+
+    const cellsHtml = DD_FIELDS.map(f => `
+      <div class="dd-cell">
+        <div class="dd-lbl">${f.l}</div>
+        <div class="dd-val" style="font-size:13px">${avgs[f.k] != null ? f.f(avgs[f.k]) : '—'}</div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="card" style="border-top: 4px solid ${IG_COL[ig]}">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title" style="color:${IG_COL[ig]}">${ig}</div>
+          <div class="sb-lbl">${count} Negara</div>
+        </div>
+        <p style="font-size:12px; margin: 10px 0; color:var(--text2)">${desc}</p>
+        <div class="dd-grid" style="grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 8px;">
+          ${cellsHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  let nlgText = `Pada tahun ${yr}, tercatat ${yrData.length} negara dalam dataset. `;
+  if (prevYr) {
+    if (shifts.length > 0) {
+      const totalYr = yrData.length;
+      const totalPrevYr = prevYrData.length;
+      nlgText += `Dibandingkan tahun ${prevYr}, terjadi perubahan jumlah negara terdata pada kelompok: ${shifts.join(', ')}. `;
+      
+      if (totalYr < totalPrevYr) {
+        nlgText += `Penurunan angka ini sangat mungkin disebabkan oleh <strong>data yang belum dirilis/kosong (missing data)</strong> untuk ${totalPrevYr - totalYr} entitas negara pada tahun ${yr}, bukan murni karena pergeseran kelas ekonomi.`;
+      } else {
+        nlgText += `Hal ini mencerminkan mobilitas ekonomi global, di mana negara-negara berpindah kategori berdasarkan ambang batas GNI Atlas Method yang disesuaikan setiap tahunnya.`;
+      }
+    } else {
+      nlgText += `Komposisi jumlah negara per kelompok tetap stabil dan tidak berubah dibandingkan tahun ${prevYr}.`;
+    }
+  } else {
+    nlgText += `Menampilkan data tahun awal (${yr}). Analisis perbandingan tren komposisi akan tersedia mulai tahun berikutnya.`;
+  }
+  document.getElementById('char-nlg').innerHTML = nlgText;
+
+  document.getElementById('char-grid').innerHTML = html;
+};
+
+// ══════════════════════════════════════════════════════
+// TIME SERIES — Chart.js
+// ══════════════════════════════════════════════════════
+const TS_COL=['#c1440e','#1a4e8a','#2d6a4f'];
+const TS_COL2=['#f97316','#3b82f6','#10b981']; // Warna yang lebih terang untuk garis Y2
+window.setTsMode = function(m){
+  tsMode=m;
+  document.getElementById('btn-dual').classList.toggle('on',m==='dual');
+  document.getElementById('btn-norm').classList.toggle('on',m==='norm');
+  renderTS();
+};
+window.addTsCountry = function(){
+  const inputVal = document.getElementById('ts-sel').value;
+  if(!inputVal) return;
+  const validName = allCountries.find(c => c.toLowerCase() === inputVal.toLowerCase());
+  if(!validName || tsCountries.includes(validName) || tsCountries.length>=3) return;
+  tsCountries.push(validName); 
+  document.getElementById('ts-sel').value = '';
+  renderTsTags(); 
+  renderTS();
+};
+window.removeTsCountry = function(c){ tsCountries=tsCountries.filter(x=>x!==c); renderTsTags(); renderTS(); };
+function renderTsTags(){
+  document.getElementById('ts-tags').innerHTML=tsCountries.map((c,i)=>{
+    const col=TS_COL[i];
+    return `<div class="tag" style="background:${col}18;color:${col};border-color:${col}55;">${c}<span class="tag-x" onclick="removeTsCountry('${c}')">×</span></div>`;
+  }).join('');
+}
+window.renderTS = function(){
+  if(tsChart){tsChart.destroy();tsChart=null;}
+  if(!tsCountries.length) return;
+  const m1=document.getElementById('ts-m1').value, m2=document.getElementById('ts-m2').value;
+  const datasets=[];
+  tsCountries.forEach((c,i)=>{
+    const col=TS_COL[i];
+    const col2=TS_COL2[i]; // Memanggil warna garis Y2
+    const rows=globalData.filter(d=>d['Country Name']===c).sort((a,b)=>a.Year-b.Year);
+    const yrs=rows.map(d=>d.Year), v1=rows.map(d=>d[m1]), v2=m2!=='none'?rows.map(d=>d[m2]):null;
+    if(tsMode==='norm'){
+      const b1=v1.find(v=>v!=null)||1;
+      datasets.push({label:c+' – '+m1,data:v1.map((v,j)=>({x:yrs[j],y:v!=null?+(v/b1*100).toFixed(2):null})),borderColor:col,borderWidth:2,pointRadius:2,fill:false,tension:.3,spanGaps:true,yAxisID:'y'});
+      if(v2){const b2=v2.find(v=>v!=null)||1; datasets.push({label:c+' – '+m2,data:v2.map((v,j)=>({x:yrs[j],y:v!=null?+(v/b2*100).toFixed(2):null})),borderColor:col2,borderWidth:2,pointRadius:2,fill:false,tension:.3,spanGaps:true,yAxisID:'y'});}
+    } else {
+      datasets.push({label:c+' – '+m1,data:v1.map((v,j)=>({x:yrs[j],y:v})),borderColor:col,borderWidth:2,pointRadius:2,fill:false,tension:.3,spanGaps:true,yAxisID:'yL'});
+      if(v2) datasets.push({label:c+' – '+m2,data:v2.map((v,j)=>({x:yrs[j],y:v})),borderColor:col2,borderWidth:2,pointRadius:2,fill:false,tension:.3,spanGaps:true,yAxisID:'yR'});
+    }
+  });
+  const scales=tsMode==='norm'
+    ?{x:{type:'linear',grid:{color:'#e2e5ea'},title:{display:true,text:'Tahun'}},y:{grid:{color:'#e2e5ea'},title:{display:true,text:'Indeks (Base 100)'}}}
+    :{x:{type:'linear',grid:{color:'#e2e5ea'},title:{display:true,text:'Tahun'}},yL:{position:'left',grid:{color:'#e2e5ea'},title:{display:true,text:MLBL[m1]||''}},yR:{position:'right',grid:{drawOnChartArea:false},title:{display:true,text:m2!=='none'?MLBL[m2]||'':''}}};
+  const ctx=document.getElementById('ts-chart').getContext('2d');
+  tsChart=new Chart(ctx,{type:'line',data:{datasets},options:{responsive:true,maintainAspectRatio:false,parsing:{xAxisKey:'x',yAxisKey:'y'},plugins:{legend:{labels:{font:{size:11,family:'DM Sans'},boxWidth:20}},tooltip:{mode:'index',intersect:false}},scales,interaction:{mode:'nearest',axis:'x',intersect:false}}});
+};
+
+// ══════════════════════════════════════════════════════
+// REGIONAL — Chart.js + Plotly scatter
+// ══════════════════════════════════════════════════════
+window.renderRegional = function(){
+  if(!globalData.length) return;
+  const yr=getYear();
+  const m=document.getElementById('reg-metric').value;
+  const sx=document.getElementById('reg-scatter-x').value;
+  const sy=document.getElementById('reg-scatter-y').value;
+  
+  const data=globalData.filter(d=>d.Year===yr&&d.Benua);
+  const ragg={};
+  data.forEach(d=>{ 
+    const r=d.Benua; 
+    if(!ragg[r]) ragg[r]={m1:[], mx:[], my:[], gdp:[]}; 
+    if(d[m]!=null) ragg[r].m1.push(d[m]); 
+    if(d[sx]!=null) ragg[r].mx.push(d[sx]);
+    if(d[sy]!=null) ragg[r].my.push(d[sy]);
+    if(d.GDP_per_capita!=null) ragg[r].gdp.push(d.GDP_per_capita);
+  });
+  
+  const lbls=Object.keys(ragg).sort();
+  const avgs=lbls.map(r=>ragg[r].m1.length?ragg[r].m1.reduce((a,b)=>a+b,0)/ragg[r].m1.length:0);
+  
+  if(regChart){regChart.destroy();regChart=null;}
+  const ctx=document.getElementById('reg-chart').getContext('2d');
+  
+  const datasets = [{
+    label:MLBL[m],
+    data:avgs.map(v=>+v.toFixed(2)),
+    backgroundColor:lbls.map(r=>(RCOL[r]||'#888')+'bb'),
+    borderColor:lbls.map(r=>RCOL[r]||'#888'),
+    borderWidth:1
+  }];
+  
+  const scales = {
+    x:{grid:{display:false},ticks:{font:{size:10,family:'DM Sans'}}},
+    y:{grid:{color:'#e2e5ea'},ticks:{font:{size:10}}, title:{display:true, text:MLBL[m]}}
+  };
+  
+  regChart=new Chart(ctx,{
+    type:'bar',
+    data:{labels:lbls,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales
+    }
+  });
+
+  // Bubble: Multi-Dimensi per Kawasan
+  const pts=lbls.map(r=>{
+    const rg = ragg[r];
+    return {
+      r,
+      x:rg.mx.length?rg.mx.reduce((a,b)=>a+b,0)/rg.mx.length:null,
+      y:rg.my.length?rg.my.reduce((a,b)=>a+b,0)/rg.my.length:null,
+      gdp:rg.gdp.length?rg.gdp.reduce((a,b)=>a+b,0)/rg.gdp.length:1000
+    };
+  }).filter(p=>p.x!=null&&p.y!=null);
+  
+  const scatterXAxis = {title:MLBL[sx],gridcolor:'#e2e8f0',tickfont:{color:'#64748b'}, autorange: true};
+  if(sx === 'GDP_per_capita') scatterXAxis.type = 'log';
+  
+  const scatterYAxis = {title:MLBL[sy],gridcolor:'#e2e8f0',tickfont:{color:'#64748b'}, autorange: true};
+  if(sy === 'GDP_per_capita') scatterYAxis.type = 'log';
+
+  Plotly.newPlot('reg-scatter',[{
+    x:pts.map(p=>p.x),
+    y:pts.map(p=>p.y),
+    mode:'markers+text',
+    text:pts.map(p=>p.r),
+    textposition:'top center',
+    cliponaxis: false,
+    textfont:{size:10,color:'#475569'},
+    marker:{size:pts.map(p=>Math.sqrt(p.gdp/500)+12),color:pts.map(p=>RCOL[p.r]||'#888'),opacity:.8,line:{width:1,color:'#fff'}},
+    hovertemplate:'<b>%{text}</b><br>'+MLBL[sx]+': %{x:,.1f}<br>'+MLBL[sy]+': %{y:,.1f}<extra></extra>'
+  }],{
+    xaxis:scatterXAxis,
+    yaxis:scatterYAxis,
+    margin:{t:45,b:50,l:60,r:100},
+    paper_bgcolor:'transparent',plot_bgcolor:'transparent',
+    font:{family:'DM Sans',size:11,color:'#0f172a'},showlegend:false
+  },{responsive:true,displayModeBar:false});
+};
+
+// ══════════════════════════════════════════════════════
+// PROFIL NEGARA — Chart.js
+// ══════════════════════════════════════════════════════
+const DD_FIELDS=[
+  {k:'GDP_per_capita',l:'GDP per Kapita',f:v=>'$'+Math.round(v).toLocaleString()},
+  {k:'Internet_Usage',l:'Internet Access',f:v=>v.toFixed(1)+'%'},
+  {k:'Life_Expectancy',l:'Life Expectancy',f:v=>v.toFixed(1)+' thn'},
+  {k:'Inflation',l:'Inflasi',f:v=>v.toFixed(2)+'%'},
+  {k:'Electricity_Access',l:'Akses Listrik',f:v=>v.toFixed(1)+'%'},
+  {k:'Unemployment',l:'Pengangguran',f:v=>v.toFixed(1)+'%'},
+  {k:'Water_Access',l:'Akses Air Bersih',f:v=>v.toFixed(1)+'%'},
+  {k:'School_Enrollment',l:'Pendaftaran Sekolah',f:v=>v.toFixed(1)+'%'},
+  {k:'Urban_Population',l:'Populasi Urban',f:v=>v.toFixed(1)+'%'},
+  {k:'Pop_Growth',l:'Pertumbuhan Pop.',f:v=>v.toFixed(2)+'%'},
+];
+
+window.updateCountryProfileGrid = function() {
+  const name = document.getElementById('country-search-main').value;
+  if(!name) return;
+  const validName = allCountries.find(c => c.toLowerCase() === name.toLowerCase());
+  if(!validName) return;
+  const rows = globalData.filter(d => d['Country Name'] === validName).sort((a, b) => a.Year - b.Year);
+  if(!rows.length) return;
+
+  const yr = getYear();
+  let targetData = rows.find(d => d.Year === yr);
+  let isFallback = false;
+  if(!targetData) {
+      targetData = [...rows].reverse().find(d => d.GDP_per_capita != null) || rows[rows.length - 1];
+      isFallback = true;
+  }
+
+  document.getElementById('country-hd').style.display = 'block';
+  document.getElementById('c-name').textContent = validName;
+  const badge = document.getElementById('c-badge');
+  badge.textContent = targetData['Income Group'];
+  badge.style.background = IG_BG[targetData['Income Group']] || '#f4f5f7';
+  badge.style.color = IG_COL[targetData['Income Group']] || '#333';
+  document.getElementById('c-region').textContent = targetData.Benua || '';
+  
+  let yrInfo = document.getElementById('c-year-info');
+  if(!yrInfo) {
+      yrInfo = document.createElement('div');
+      yrInfo.id = 'c-year-info';
+      yrInfo.style.fontSize = '12px';
+      yrInfo.style.color = 'var(--text2)';
+      yrInfo.style.marginTop = '8px';
+      yrInfo.style.padding = '5px 10px';
+      yrInfo.style.background = 'rgba(59, 130, 246, 0.08)';
+      yrInfo.style.borderRadius = '6px';
+      yrInfo.style.display = 'inline-block';
+      document.getElementById('country-hd').appendChild(document.createElement('br'));
+      document.getElementById('country-hd').appendChild(yrInfo);
+  }
+  
+  if (isFallback) {
+      yrInfo.innerHTML = `<i class="bi bi-info-circle"></i> Menampilkan data <strong>Tahun ${targetData.Year}</strong> (Data ${yr} belum tersedia)`;
+  } else {
+      yrInfo.innerHTML = `<i class="bi bi-calendar-check"></i> Menampilkan data <strong>Tahun ${targetData.Year}</strong> (Sesuai dengan menu filter)`;
+  }
+
+  document.getElementById('dd-grid').innerHTML = DD_FIELDS.map(({k, l, f}) => {
+    const v = targetData[k];
+    return `<div class="dd-cell"><div class="dd-lbl">${l}</div><div class="dd-val">${v != null ? f(v) : '—'}</div></div>`;
+  }).join('');
+};
+
+function selectCountry(name){
+  if(!name) return;
+  const validName = allCountries.find(c => c.toLowerCase() === name.toLowerCase());
+  if(!validName) return;
+  
+  const ids = ['gap-country-search', 'compass-country-search', 'country-search-main'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = validName;
+  });
+  updateCountryProfileGrid();
+  renderCompass();
+  renderMultiLayerGap();
+  const rows=globalData.filter(d=>d['Country Name']===validName).sort((a,b)=>a.Year-b.Year);
+  if(!rows.length) return;
+  if(cTrendChart){cTrendChart.destroy();cTrendChart=null;}
+  const yrs=rows.map(d=>d.Year);
+  const ctx=document.getElementById('c-trend').getContext('2d');
+  cTrendChart=new Chart(ctx,{type:'line',data:{labels:yrs,datasets:[
+    {label:'GDP per Kapita',data:rows.map(d=>d.GDP_per_capita),borderColor:'#2563eb',yAxisID:'yL',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Internet %',data:rows.map(d=>d.Internet_Usage),borderColor:'#16a34a',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Life Exp',data:rows.map(d=>d.Life_Expectancy),borderColor:'#d97706',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2,borderDash:[4,3]},
+    {label:'Inflasi',data:rows.map(d=>d.Inflation),borderColor:'#dc2626',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2,borderDash:[2,2]},
+    {label:'Listrik %',data:rows.map(d=>d.Electricity_Access),borderColor:'#fbbf24',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Air Bersih %',data:rows.map(d=>d.Water_Access),borderColor:'#0ea5e9',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Sekolah %',data:rows.map(d=>d.School_Enrollment),borderColor:'#8b5cf6',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Pengangguran %',data:rows.map(d=>d.Unemployment),borderColor:'#64748b',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Urban %',data:rows.map(d=>d.Urban_Population),borderColor:'#ec4899',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+    {label:'Pop Growth %',data:rows.map(d=>d.Pop_Growth),borderColor:'#10b981',yAxisID:'yR',fill:false,tension:.3,spanGaps:true,pointRadius:2},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11,family:'DM Sans'},boxWidth:20}},tooltip:{mode:'index',intersect:false}},scales:{x:{grid:{color:'#e2e5ea'}},yL:{position:'left',title:{display:true,text:'GDP (USD)'},grid:{color:'#e2e5ea'}},yR:{position:'right',title:{display:true,text:'% / Tahun'},grid:{drawOnChartArea:false}}}}});
+};
+
+// ══════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════
+function linReg(pts){
+  const n=pts.length; if(n<2) return null;
+  let sx=0,sy=0,sxy=0,sxx=0;
+  pts.forEach(p=>{sx+=p.x;sy+=p.y;sxy+=p.x*p.y;sxx+=p.x*p.x;});
+  const d=n*sxx-sx*sx; if(d===0) return null;
+  const m=(n*sxy-sx*sy)/d, b=(sy-m*sx)/n;
+  return x=>m*x+b;
+}
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// ══════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab-'+this.dataset.tab).classList.add('active');
+    const tab=this.dataset.tab;
+    if(tab==='map'){const fd=filtered(getYear());renderMap(fd,getYear());renderGDPBar(fd);}
+    if(tab==='scatter'){window.renderScatter();window.renderMultiLayerGap();}
+    if(tab==='regional') renderRegional();
+    if(tab==='trend') renderTS();
+    if(tab==='explainer') renderCausal();
+    if(tab==='characteristics') renderCharacteristics();
+  });
+});
+
+window.processCsvFiles = processCsvFiles;
+window.selectCountry = selectCountry;
+
+window.resetApp = function(){
+  globalData=[];allCountries=[];tsCountries=[];
+  document.getElementById('app').style.display='none';
+  document.getElementById('splash').classList.remove('gone');
+  document.getElementById('splash-err').style.display='none';
+  document.getElementById('splash-fb').style.display='none';
+  document.getElementById('prog-wrap').style.display='block';
+  setProg(0,'Siap memuat ulang…');
+};
+
+document.getElementById('btn-pick-files').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+});
+
+init();
+</script>
+</body>
+</html>
