@@ -143,7 +143,7 @@ h1, .sb-title, .splash-title, .card-title, .header-tagline {
     <div class="tab" data-tab="regional">🏛 Regional</div>
     <div class="tab" data-tab="country">🔍 Profil Negara</div>
     <div class="tab" data-tab="characteristics">📜 Karakteristik Group</div>
-    <div class="tab" data-tab="explainer">💡 Kausalitas</div>
+    <div class="tab" data-tab="explainer">💡 Korelasi</div>
   </div>
 
   <!-- TAB: PETA -->
@@ -399,7 +399,7 @@ h1, .sb-title, .splash-title, .card-title, .header-tagline {
     </div>
   </div>
 
-  <!-- TAB: KAUSALITAS -->
+  <!-- TAB: KORELASI -->
   <div class="tab-content" id="tab-explainer">
     <div class="row2" style="margin-bottom: 24px;">
       <div class="card" style="margin-bottom: 0;">
@@ -716,7 +716,7 @@ function setupSidebar(){
 }
 
 // Inisialisasi Gemini AI
-const API_KEY = "AIzaSyA0g2VZzlMfxwOMHDU87AgBRoMf9pplj68";
+const API_KEY = "AIzaSyAD9BptdHqa1hS6uEyI5V7r3Z2jDoLY91A";
 const genAI = new GoogleGenerativeAI(API_KEY);
 const MODEL_NAME = "gemini-3-flash-preview"; 
 
@@ -991,7 +991,7 @@ window.renderBoxPlot = function(){
     yaxis:{title:MLBL[m],gridcolor:'#e2e8f0',tickfont:{color:'#64748b'}},
     xaxis:{tickfont:{color:'#64748b'}},
     font:{family:'DM Sans',size:11,color:'#0f172a'},
-    hoverlabel: { bgcolor: "#fff", bordercolor: "#e2e8f0", font: { family: 'DM Sans', size: 12 } }
+    hoverlabel: { bgcolor: "#ffffff", bordercolor: "#e2e8f0", font: { family: 'DM Sans', size: 12, color: '#0f172a' } }
   },{responsive:true,displayModeBar:false});
 };
 
@@ -1247,8 +1247,8 @@ window.renderCompass = function() {
       theta: labels,
       fill: 'toself',
       name: 'Rata-rata Global',
-      line: { color: '#94a3b8' },
-      fillcolor: 'rgba(148, 163, 184, 0.2)'
+      line: { color: '#94a3b8', dash: 'dot', width: 1 },
+      fillcolor: 'rgba(148, 163, 184, 0.1)'
     },
     {
       type: 'scatterpolar',
@@ -1256,8 +1256,8 @@ window.renderCompass = function() {
       theta: labels,
       fill: 'toself',
       name: 'Rata-rata ' + ig.replace(' Income',''),
-      line: { color: IG_COL[ig] },
-      fillcolor: IG_BG[ig].replace(')', ', 0.3)').replace('rgb', 'rgba')
+      line: { color: IG_COL[ig], dash: 'dash', width: 1 },
+      fillcolor: IG_COL[ig] + '33' // Menambahkan transparansi 20% pada kode Hex
     },
     {
       type: 'scatterpolar',
@@ -1265,9 +1265,9 @@ window.renderCompass = function() {
       theta: labels,
       fill: 'toself',
       name: name,
-      line: { color: '#3b82f6', width: 4 },
-      marker: { size: 8, symbol: 'circle' },
-      fillcolor: 'rgba(59, 130, 246, 0.1)'
+      line: { color: '#8b5cf6', width: 2 },
+      marker: { size: 6, symbol: 'circle', color: '#8b5cf6' },
+      fillcolor: 'rgba(139, 92, 246, 0.35)'
     }
   ];
 
